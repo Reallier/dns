@@ -1,0 +1,27 @@
+version: "3"
+services:
+  adguard:
+    restart: always
+    container_name: adguard
+    image: ccr.ccs.tencentyun.com/karasu/stck:adguard
+    network_mode: host
+    command: -w /etc/adguard -c /etc/adguard/AdGuardHome.yaml
+    volumes:
+      - ${PWD}/adguard:/etc/adguard
+
+  # smartdns:
+  #   restart: always
+  #   container_name: smartdns
+  #   image: ccr.ccs.tencentyun.com/karasu/stck:smartdns
+  #   network_mode: host
+  #   command: -f -x -c /etc/smartdns/smartdns.conf
+  #   volumes:
+  #     - ${PWD}/smartdns:/etc/smartdns
+  mosdns:
+    restart: always
+    container_name: mosdns
+    image: ccr.ccs.tencentyun.com/karasu/stck:mosdns
+    network_mode: host
+    volumes:
+      - ${PWD}/mosdns:/etc/mosdns
+

@@ -1,0 +1,11 @@
+#domain:copr.fedorainfracloud.org
+domain:bilibili.com
+domain:jd.com
+domain:163.com
+domain:126.com
+domain:126.net
+domain:qpic.cn
+domain:gradle.org
+domain:gradle-dn.com
+domain:bilivideo.com
+domain:bilivideo.cn

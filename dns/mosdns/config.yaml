@@ -1,0 +1,252 @@
+log:
+  file: ""
+  level: debug
+
+plugins:
+  # 缓存的插件
+  - tag: local_cache
+    type: cache
+    args:
+      size: 114514
+      lazy_cache_ttl: 86400
+
+  # Hosts的插件
+  - tag: hosts
+    type: hosts
+    args:
+      files:
+        - "./self/hosts"
+
+  # 设定 ECS
+  - tag: ecs_cn
+    type: sequence
+    args:
+      - exec: ecs 1.2.4.0/24 2001:dc7:1000::1/48
+  - tag: ecs_non_cn
+    type: sequence
+    args:
+      # 非国内写了个台湾的进去
+      - exec: ecs 168.95.1.0/24 2001:b000:168::1/48
+
+  # 调整 TTL 的插件
+  - tag: ttl_short
+    type: sequence
+    args:
+      - exec: ttl 60-3600
+  - tag: ttl_long
+    type: sequence
+    args:
+      - exec: ttl 300-3600
+
+  # 屏蔽请求的插件
+  - tag: seq_black_hole
+    type: sequence
+    args:
+      - exec: black_hole 127.0.0.1 ::1 0.0.0.0
+      - exec: accept
+
+  # Akamai 域名
+  - tag: data_cname_akamai
+    type: domain_set
+    args:
+      exps:
+        - "akamaiedge.net"
+        - "akadns.net"
+        - "edgekey.net"
+
+  # CN 域名
+  # 除了 CN 的域名,还包含海外服务在国内可以加速的域名
+  # 例如谷歌和苹果
+  - tag: data_chinalist
+    type: domain_set
+    args:
+      files:
+        # 自带的列表
+        - "./res/geosite/geosite_cn.txt"
+        - "./res/geosite/geosite_google-cn.txt"
+        - "./res/geosite/geosite_apple-cn.txt"
+        - "./self/china-list-user.txt"
+
+  # 污染/被墙域名
+  - tag: data_gfwlist
+    type: domain_set
+    args:
+      files:
+        - "./res/geosite/geosite_gfw.txt"
+        - "./res/geosite/geosite_greatfire.txt"
+
+  # 国内 CDN 域名
+  - tag: data_cn_cdn
+    type: domain_set
+    args:
+      files:
+        - "./res/cdn_domain_list.txt"
+
+  # 需要国内 ECS 的域名
+  # 需要注意这里是要使用国内 ECS 去解析以获得更好的返回 IP
+  # 比如说靠近国内的 CDN 之类的
+  - tag: data_cn_ecs_domain
+    type: domain_set
+    args:
+      files:
+        - "./res/ecs_cn_domain.txt"
+
+  # 非国内 ECS 的域名
+  # 这些域名将使用一个海外 ECS 去解析
+  - tag: data_non_cn_ecs_domain
+    type: domain_set
+    args:
+      files:
+        - "./res/ecs_tw_domain.txt"
+
+  # 国内 IP
+  - tag: data_cn_ip
+    type: ip_set
+    args:
+      files:
+        - "./res/geoip/geoip_cn.txt"
+
+  # 被 GFW 的 IP
+  - tag: data_gfw_ip
+    type: ip_set
+    args:
+      files:
+        - "./res/gfw_ip_list.txt"
+
+  # 国内转发
+  - tag: forward_cn
+    type: forward_dnsproxy
+    args:
+      upstreams:
+        # 阿里 DNS
+        - addr: https://dns.alidns.com/dns-query
+        - addr: https://223.5.5.5/dns-query
+        # 腾讯 DNS
+        - addr: https://doh.pub/dns-query
+        - addr: https://1.12.12.12/dns-query
+        - addr: https://120.53.53.53/dns-query
+        - addr: 114.114.114.114
+        - addr: 114.114.115.115
+        - addr: 223.5.5.5
+        - addr: 223.6.6.6
+        - addr: 119.29.29.29
+        # 广东电信用的 DNS 可选
+        - addr: 202.96.128.86
+        - addr: 202.96.128.166
+        - addr: 202.96.134.33
+        # 这个服务器废了,返回必定 Refused
+        # - addr: 202.96.128.68
+      bootstrap:
+        - https://1.12.12.12/dns-query
+        - https://120.53.53.53/dns-query
+
+  # 加密转发,国外部分
+  # 此处的 DNS 混合了支持和不支持 ECS
+  # 如果需要无污染并且支持 ECS 请选择 forward_encrypt_ecs
+  - tag: forward_encrypt
+    type: forward_dnsproxy
+    args:
+      upstreams:
+        # 原始服务,几乎暴毙
+        - addr: https://one.one.one.one/dns-query
+        - addr: https://1.1.1.1/dns-query
+        - addr: https://dns11.quad9.net/dns-query
+        - addr: https://unfiltered.adguard-dns.com/dns-query
+
+      bootstrap:
+        - https://223.5.5.5/dns-query
+        - https://1.12.12.12/dns-query
+        - https://120.53.53.53/dns-query
+
+  # 加密转发,但是只有支持 ECS 的
+  - tag: forward_encrypt_ecs
+    type: forward_dnsproxy
+    args:
+      upstreams:
+        # 原始服务,几乎暴毙
+        - addr: https://dns11.quad9.net/dns-query
+      bootstrap:
+        - https://223.5.5.5/dns-query
+        - https://1.12.12.12/dns-query
+        - https://120.53.53.53/dns-query
+
+  # 对应的序列,执行完就返回结果
+  # 使用这几个序列可以防止得到结果后参与后续匹配
+  - tag: seq_only_forward_cn
+    type: sequence
+    args:
+      - exec: $forward_cn
+      - exec: accept
+  - tag: seq_only_forward_encrypt
+    type: sequence
+    args:
+      - exec: $forward_encrypt
+      - exec: accept
+  - tag: seq_only_forward_encrypt_ecs
+    type: sequence
+    args:
+      - exec: $forward_encrypt_ecs
+      - exec: accept
+
+  # 海外 ECS 序列
+  - tag: seq_non_cn_domain
+    type: sequence
+    args:
+      # 先写 ECS 信息
+      - exec: $ecs_non_cn
+      # 然后丢给海外
+      - exec: $forward_encrypt_ecs
+      # 写入长时间的 TTL
+      - exec: $ttl_short
+      - exec: accept
+
+  # 主要的运行逻辑插件
+  - tag: seq_main
+    type: sequence
+    args:
+      # 域名映射IP
+      - exec: $hosts
+
+      # 缓存
+      - exec: $local_cache
+
+      # TYPE 65 丢弃
+      - matches:
+          - qtype 65
+        exec: goto seq_black_hole
+
+      # CN 域名用 CN 服务器
+      - matches:
+          - qname $data_non_cn_ecs_domain
+        exec: goto seq_only_forward_cn
+
+      # PTR 类型也用 CN 服务器
+      - matches:
+          - qtype 12
+        exec: goto seq_only_forward_cn
+
+      # 强制需要海外 ECS 的用海外服务器
+      - matches:
+          - qname $data_non_cn_ecs_domain
+        exec: goto seq_non_cn_domain
+
+      # CN 列表/国内 CDN/Akamai
+      # 使用国内服务解析
+      - matches:
+          - qname $data_chinalist
+        exec: goto seq_only_forward_cn
+      - matches:
+          - qname $data_cn_cdn
+        exec: goto seq_only_forward_cn
+      - matches:
+          - qname $data_cname_akamai
+        exec: goto seq_only_forward_cn
+
+      - exec: goto seq_only_forward_encrypt_ecs
+
+  # 主服务器
+  - tag: ""
+    type: "udp_server"
+    args:
+      entry: seq_main # 可执行插件的 tag。
+      listen: 0.0.0.0:55 # 监听地址。
